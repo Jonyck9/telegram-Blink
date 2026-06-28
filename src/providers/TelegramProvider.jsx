@@ -7,6 +7,7 @@ import {
   themeParamsState,
   viewport,
   viewportState,
+  retrieveLaunchParams,
   isTMA,
   mockTelegramEnv,
 } from '@telegram-apps/sdk'
@@ -60,6 +61,20 @@ function maybeMockTelegram() {
   })
 }
 
+/** Try to extract user from current URL as fallback */
+function userFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search)
+    const tgData = params.get('tgWebAppData') || params.get('tgWebAppData')
+    if (!tgData) return null
+    // Look for user= in the tgWebAppData query string
+    const up = new URLSearchParams(tgData)
+    const raw = up.get('user')
+    if (raw) return JSON.parse(decodeURIComponent(raw))
+  } catch {}
+  return null
+}
+
 export function TelegramProvider({ children }) {
   const [ready, setReady] = useState(false)
   const [error, setError] = useState(null)
@@ -71,15 +86,29 @@ export function TelegramProvider({ children }) {
 
       // Initialize SDK
       init()
+      console.log('[Blink] SDK init done')
 
       // Mount core components
       initData.restore()
+      console.log('[Blink] initData restored')
+
       viewport.mount()
       themeParams.mountSync()
       themeParams.bindCssVars()
 
       // Expand viewport to full height
       viewport.expand()
+
+      // Debug: log user data
+      const user = initDataUser()
+      console.log('[Blink] user from initDataUser:', user)
+
+      try {
+        const lp = retrieveLaunchParams()
+        console.log('[Blink] launch params:', lp)
+      } catch (e) {
+        console.log('[Blink] launch params not available:', e.message)
+      }
 
       setReady(true)
     } catch (err) {
@@ -89,7 +118,15 @@ export function TelegramProvider({ children }) {
   }, [])
 
   const value = useMemo(() => {
-    const user = initDataUser()
+    // Try initDataUser first, fall back to direct URL parsing
+    let user = initDataUser()
+    console.log('[Blink] initDataUser value:', user)
+
+    if (!user) {
+      user = userFromUrl()
+      console.log('[Blink] fallback user from URL:', user)
+    }
+
     const theme = themeParamsState()
     const vp = viewportState()
 
@@ -97,12 +134,12 @@ export function TelegramProvider({ children }) {
       user: user
         ? {
             id: user.id,
-            firstName: user.firstName,
-            lastName: user.lastName,
+            firstName: user.firstName || user.first_name,
+            lastName: user.lastName || user.last_name,
             username: user.username,
-            languageCode: user.languageCode,
-            photoUrl: user.photoUrl,
-            isPremium: user.isPremium,
+            languageCode: user.languageCode || user.language_code,
+            photoUrl: user.photoUrl || user.photo_url,
+            isPremium: user.isPremium || user.is_premium,
           }
         : null,
       theme: theme
