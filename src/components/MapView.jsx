@@ -4,6 +4,17 @@ import L from 'leaflet'
 import { useTelegram } from '../providers/TelegramProvider'
 import './MapView.css'
 
+// Generate a consistent color from a string (user id)
+function colorFromId(id) {
+  const colors = [
+    '#c084fc', '#f472b6', '#fb923c', '#fbbf24',
+    '#34d399', '#22d3ee', '#818cf8', '#f87171',
+    '#a78bfa', '#2dd4bf', '#e879f9', '#38bdf8',
+  ]
+  const num = typeof id === 'number' ? id : String(id).length
+  return colors[num % colors.length]
+}
+
 function LocationUpdater({ position }) {
   const map = useMap()
   useEffect(() => {
@@ -29,13 +40,27 @@ export default function MapView() {
       ? `${user.firstName?.[0] ?? ''}${user.lastName?.[0] ?? ''}`.toUpperCase() || '?'
       : '?'
 
-    const avatarHtml = user?.photoUrl
-      ? `<img class="marker-avatar-img" src="${user.photoUrl}" alt="" />`
-      : `<span class="marker-avatar-initials">${initials}</span>`
+    const avatarColor = colorFromId(user?.id)
 
+    if (user?.photoUrl) {
+      return L.divIcon({
+        className: 'user-marker',
+        html: `<div class="marker-avatar-wrap">
+          <img class="marker-avatar-img" src="${user.photoUrl}" alt="" />
+          <div class="marker-avatar-ring" style="background:${avatarColor}40"></div>
+        </div>`,
+        iconSize: [44, 44],
+        iconAnchor: [22, 22],
+      })
+    }
+
+    // Fallback: nice initials badge with background color
     return L.divIcon({
       className: 'user-marker',
-      html: `<div class="marker-avatar-wrap">${avatarHtml}<div class="marker-avatar-ring"></div></div>`,
+      html: `<div class="marker-avatar-wrap">
+        <div class="marker-avatar-initials" style="background:${avatarColor}">${initials}</div>
+        <div class="marker-avatar-ring" style="background:${avatarColor}40"></div>
+      </div>`,
       iconSize: [44, 44],
       iconAnchor: [22, 22],
     })
