@@ -14,15 +14,9 @@ import {
 
 const TelegramContext = createContext(null)
 
-/**
- * In development mode, mock the Telegram environment so the app
- * works outside the Telegram client.
- */
 function maybeMockTelegram() {
-  if (isTMA()) return // already in Telegram
-
+  if (isTMA()) return
   console.info('[Blink] Not in Telegram — applying mock environment')
-
   mockTelegramEnv({
     themeParams: {
       accentTextColor: '#c084fc',
@@ -61,17 +55,32 @@ function maybeMockTelegram() {
   })
 }
 
-/** Try to extract user from current URL as fallback */
-function userFromUrl() {
+/** Extract user data from Telegram init data by any means possible */
+function extractUser() {
+  // 1. SDK method
+  try {
+    const u = initDataUser()
+    if (u) return u
+  } catch {}
+
+  // 2. Direct from URL tgWebAppData
   try {
     const params = new URLSearchParams(window.location.search)
-    const tgData = params.get('tgWebAppData') || params.get('tgWebAppData')
-    if (!tgData) return null
-    // Look for user= in the tgWebAppData query string
-    const up = new URLSearchParams(tgData)
-    const raw = up.get('user')
-    if (raw) return JSON.parse(decodeURIComponent(raw))
+    const tgData = params.get('tgWebAppData')
+    if (tgData) {
+      const up = new URLSearchParams(tgData)
+      const raw = up.get('user')
+      if (raw) return JSON.parse(decodeURIComponent(raw))
+    }
   } catch {}
+
+  // 3. From Telegram WebView low-level API
+  try {
+    if (window.Telegram?.WebApp?.initDataUnsafe?.user) {
+      return window.Telegram.WebApp.initDataUnsafe.user
+    }
+  } catch {}
+
   return null
 }
 
@@ -81,35 +90,13 @@ export function TelegramProvider({ children }) {
 
   useEffect(() => {
     try {
-      // Mock if needed
       maybeMockTelegram()
-
-      // Initialize SDK
       init()
-      console.log('[Blink] SDK init done')
-
-      // Mount core components
       initData.restore()
-      console.log('[Blink] initData restored')
-
       viewport.mount()
       themeParams.mountSync()
       themeParams.bindCssVars()
-
-      // Expand viewport to full height
       viewport.expand()
-
-      // Debug: log user data
-      const user = initDataUser()
-      console.log('[Blink] user from initDataUser:', user)
-
-      try {
-        const lp = retrieveLaunchParams()
-        console.log('[Blink] launch params:', lp)
-      } catch (e) {
-        console.log('[Blink] launch params not available:', e.message)
-      }
-
       setReady(true)
     } catch (err) {
       console.error('[Blink] Telegram init error:', err)
@@ -118,30 +105,24 @@ export function TelegramProvider({ children }) {
   }, [])
 
   const value = useMemo(() => {
-    // Try initDataUser first, fall back to direct URL parsing
-    let user = initDataUser()
-    console.log('[Blink] initDataUser value:', user)
-
-    if (!user) {
-      user = userFromUrl()
-      console.log('[Blink] fallback user from URL:', user)
-    }
-
+    const raw = extractUser()
     const theme = themeParamsState()
     const vp = viewportState()
 
+    const user = raw
+      ? {
+          id: raw.id,
+          firstName: raw.firstName || raw.first_name,
+          lastName: raw.lastName || raw.last_name,
+          username: raw.username,
+          languageCode: raw.languageCode || raw.language_code,
+          photoUrl: raw.photoUrl || raw.photo_url,
+          isPremium: raw.isPremium || raw.is_premium,
+        }
+      : null
+
     return {
-      user: user
-        ? {
-            id: user.id,
-            firstName: user.firstName || user.first_name,
-            lastName: user.lastName || user.last_name,
-            username: user.username,
-            languageCode: user.languageCode || user.language_code,
-            photoUrl: user.photoUrl || user.photo_url,
-            isPremium: user.isPremium || user.is_premium,
-          }
-        : null,
+      user,
       theme: theme
         ? {
             bgColor: theme.bgColor,
