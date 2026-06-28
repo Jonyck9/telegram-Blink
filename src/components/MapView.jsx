@@ -4,17 +4,6 @@ import L from 'leaflet'
 import { useTelegram } from '../providers/TelegramProvider'
 import './MapView.css'
 
-// Generate a consistent color from a string (user id)
-function colorFromId(id) {
-  const colors = [
-    '#c084fc', '#f472b6', '#fb923c', '#fbbf24',
-    '#34d399', '#22d3ee', '#818cf8', '#f87171',
-    '#a78bfa', '#2dd4bf', '#e879f9', '#38bdf8',
-  ]
-  const num = typeof id === 'number' ? id : String(id).length
-  return colors[num % colors.length]
-}
-
 function LocationUpdater({ position }) {
   const map = useMap()
   useEffect(() => {
@@ -34,33 +23,25 @@ export default function MapView() {
 
   const defaultCenter = [55.7558, 37.6173] // Moscow
 
-  // Build a divIcon that shows the user's Telegram avatar (or initials)
+  // Build a marker icon
   const userIcon = useMemo(() => {
     const initials = user
       ? `${user.firstName?.[0] ?? ''}${user.lastName?.[0] ?? ''}`.toUpperCase() || '?'
       : '?'
 
-    const avatarColor = colorFromId(user?.id)
+    const color = '#c084fc'
 
-    if (user?.photoUrl) {
-      return L.divIcon({
-        className: 'user-marker',
-        html: `<div class="marker-avatar-wrap">
-          <img class="marker-avatar-img" src="${user.photoUrl}" alt="" />
-          <div class="marker-avatar-ring" style="background:${avatarColor}40"></div>
-        </div>`,
-        iconSize: [44, 44],
-        iconAnchor: [22, 22],
-      })
-    }
-
-    // Fallback: nice initials badge with background color
     return L.divIcon({
-      className: 'user-marker',
-      html: `<div class="marker-avatar-wrap">
-        <div class="marker-avatar-initials" style="background:${avatarColor}">${initials}</div>
-        <div class="marker-avatar-ring" style="background:${avatarColor}40"></div>
-      </div>`,
+      className: '',
+      html: `<div style="
+        width:44px;height:44px;display:flex;align-items:center;justify-content:center;
+      "><div style="
+        width:40px;height:40px;border-radius:50%;
+        background:${color};
+        display:flex;align-items:center;justify-content:center;
+        border:3px solid white;box-shadow:0 0 10px rgba(0,0,0,0.3);
+        font-size:16px;font-weight:700;color:white;
+      ">${initials}</div></div>`,
       iconSize: [44, 44],
       iconAnchor: [22, 22],
     })
@@ -116,7 +97,7 @@ export default function MapView() {
               <Popup>
                 <div className="user-popup">
                   <strong>{user?.firstName ?? 'You'}</strong>
-                  <span className="popup-status online">📍 Live</span>
+                  <span className="popup-status">📍 Live</span>
                   <span className="popup-coords">
                     {position[0].toFixed(4)}, {position[1].toFixed(4)}
                   </span>
@@ -161,7 +142,7 @@ export default function MapView() {
         </button>
         <button className="fab fab-chat" aria-label="Chat">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a14 0 0 1 2 2z" />
           </svg>
         </button>
       </div>
