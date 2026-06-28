@@ -1,1 +1,16 @@
-{"projectId":"prj_ae47797ykLOSzRGJFid3usHxa06l","orgId":"team_Syc0eUqtA0vyG7HaYRfeCbvX","projectName":"blink-app"}
+{
+  "projectId": "prj_ae47797ykLOSzRGJFid3usHxa06l",
+  "orgId": "team_Syc0eUqtA0vyG7HaYRfeCbvX",
+  "projectName": "blink-app",
+  "settings": {
+    "createdAt": 1782675938135,
+    "framework": "vite",
+    "devCommand": null,
+    "installCommand": null,
+    "buildCommand": null,
+    "outputDirectory": null,
+    "rootDirectory": null,
+    "directoryListing": false,
+    "nodeVersion": "24.x"
+  }
+}

@@ -32,58 +32,84 @@
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
 }
 
-/* User marker */
+/* User marker — Telegram avatar */
 .user-marker {
   background: none !important;
   border: none !important;
 }
 
-.user-marker-pulse {
-  width: 32px;
-  height: 32px;
+.marker-avatar-wrap {
+  position: relative;
+  width: 44px;
+  height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.user-marker-pulse::before {
-  content: '';
-  position: absolute;
-  width: 32px;
-  height: 32px;
+.marker-avatar-img {
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
-  background: rgba(192, 132, 252, 0.3);
-  animation: pulse-ring 2s ease-out infinite;
+  object-fit: cover;
+  border: 3px solid #c084fc;
+  z-index: 2;
+  background: #1f2028;
 }
 
-.user-marker-dot {
-  width: 14px;
-  height: 14px;
+.marker-avatar-initials {
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
   background: #c084fc;
-  border: 3px solid #fff;
-  box-shadow: 0 0 8px rgba(192, 132, 252, 0.6);
+  border: 3px solid rgba(192, 132, 252, 0.5);
   z-index: 2;
 }
 
+.marker-avatar-ring {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(192, 132, 252, 0.25);
+  animation: pulse-ring 2s ease-out infinite;
+}
+
 @keyframes pulse-ring {
-  0% { transform: scale(0.5); opacity: 1; }
-  100% { transform: scale(2); opacity: 0; }
+  0% { transform: scale(0.6); opacity: 1; }
+  100% { transform: scale(1.8); opacity: 0; }
 }
 
 .user-popup {
   text-align: center;
   font-size: 14px;
+  min-width: 120px;
 }
 
 .user-popup strong {
   display: block;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
+  font-size: 15px;
   color: #08060d;
 }
 
-.popup-coords {
+.user-popup .popup-status {
+  display: block;
   font-size: 11px;
+  font-weight: 600;
+  color: #4ade80;
+  margin-bottom: 4px;
+}
+
+.popup-coords {
+  display: block;
+  font-size: 10px;
   color: #6b6375;
 }
 

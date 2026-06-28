@@ -1,23 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet'
 import L from 'leaflet'
+import { useTelegram } from '../providers/TelegramProvider'
 import './MapView.css'
-
-// Fix Leaflet default icon issue with bundlers
-import iconUrl from 'leaflet/dist/images/marker-icon.png'
-import iconRetinaUrl from 'leaflet/dist/images/marker-icon-2x.png'
-import shadowUrl from 'leaflet/dist/images/marker-shadow.png'
-
-delete L.Icon.Default.prototype._getIconUrl
-L.Icon.Default.mergeOptions({ iconUrl, iconRetinaUrl, shadowUrl })
-
-// Custom blue user marker icon
-const userIcon = L.divIcon({
-  className: 'user-marker',
-  html: `<div class="user-marker-pulse"><div class="user-marker-dot"></div></div>`,
-  iconSize: [32, 32],
-  iconAnchor: [16, 16],
-})
 
 function LocationUpdater({ position }) {
   const map = useMap()
@@ -32,10 +17,29 @@ function LocationUpdater({ position }) {
 }
 
 export default function MapView() {
+  const { user } = useTelegram()
   const [position, setPosition] = useState(null)
   const [error, setError] = useState(null)
 
   const defaultCenter = [55.7558, 37.6173] // Moscow
+
+  // Build a divIcon that shows the user's Telegram avatar (or initials)
+  const userIcon = useMemo(() => {
+    const initials = user
+      ? `${user.firstName?.[0] ?? ''}${user.lastName?.[0] ?? ''}`.toUpperCase() || '?'
+      : '?'
+
+    const avatarHtml = user?.photoUrl
+      ? `<img class="marker-avatar-img" src="${user.photoUrl}" alt="" />`
+      : `<span class="marker-avatar-initials">${initials}</span>`
+
+    return L.divIcon({
+      className: 'user-marker',
+      html: `<div class="marker-avatar-wrap">${avatarHtml}<div class="marker-avatar-ring"></div></div>`,
+      iconSize: [44, 44],
+      iconAnchor: [22, 22],
+    })
+  }, [user])
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -86,7 +90,8 @@ export default function MapView() {
             <Marker position={position} icon={userIcon}>
               <Popup>
                 <div className="user-popup">
-                  <strong>You</strong>
+                  <strong>{user?.firstName ?? 'You'}</strong>
+                  <span className="popup-status online">📍 Live</span>
                   <span className="popup-coords">
                     {position[0].toFixed(4)}, {position[1].toFixed(4)}
                   </span>
