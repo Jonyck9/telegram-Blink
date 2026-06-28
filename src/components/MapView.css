@@ -1,0 +1,151 @@
+.map-wrapper {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+}
+
+.map-container {
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+}
+
+.map-error {
+  position: absolute;
+  top: 80px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 500;
+  background: rgba(239, 68, 68, 0.9);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  max-width: 90%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+/* User marker */
+.user-marker {
+  background: none !important;
+  border: none !important;
+}
+
+.user-marker-pulse {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.user-marker-pulse::before {
+  content: '';
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(192, 132, 252, 0.3);
+  animation: pulse-ring 2s ease-out infinite;
+}
+
+.user-marker-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #c084fc;
+  border: 3px solid #fff;
+  box-shadow: 0 0 8px rgba(192, 132, 252, 0.6);
+  z-index: 2;
+}
+
+@keyframes pulse-ring {
+  0% { transform: scale(0.5); opacity: 1; }
+  100% { transform: scale(2); opacity: 0; }
+}
+
+.user-popup {
+  text-align: center;
+  font-size: 14px;
+}
+
+.user-popup strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #08060d;
+}
+
+.popup-coords {
+  font-size: 11px;
+  color: #6b6375;
+}
+
+/* Floating action buttons */
+.map-fabs {
+  position: absolute;
+  bottom: 32px;
+  right: 16px;
+  z-index: 500;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fab {
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.fab:hover {
+  transform: scale(1.05);
+}
+
+.fab:active {
+  transform: scale(0.95);
+}
+
+.fab-locate {
+  background: rgba(22, 23, 29, 0.85);
+  backdrop-filter: blur(8px);
+  color: var(--text-h);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.fab-friends {
+  background: var(--accent);
+  color: #fff;
+}
+
+.fab-chat {
+  background: #4ade80;
+  color: #fff;
+}
+
+@media (max-width: 1024px) {
+  .map-fabs {
+    bottom: 24px;
+    right: 12px;
+    gap: 8px;
+  }
+
+  .fab {
+    width: 44px;
+    height: 44px;
+    border-radius: 14px;
+  }
+}
