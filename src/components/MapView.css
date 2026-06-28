@@ -59,6 +59,16 @@
   color: #6b6375;
 }
 
+.popup-debug {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid #e5e7eb;
+  font-size: 10px;
+  color: #6b6375;
+  text-align: left;
+  line-height: 1.5;
+}
+
 /* Floating action buttons */
 .map-fabs {
   position: absolute;

@@ -97,11 +97,13 @@ export default function MapView() {
             <Marker position={position} icon={userIcon}>
               <Popup>
                 <div className="user-popup">
-                  <strong>{user?.firstName ?? 'No user'}</strong>
-                  <span className="popup-status">{user ? '📍 Live' : '⚠️ No Telegram data'}</span>
-                  <span className="popup-coords">
-                    {position[0].toFixed(4)}, {position[1].toFixed(4)}
-                  </span>
+                  <strong>{user?.firstName || user?.username || 'No user'}</strong>
+                  <div className="popup-debug">
+                    Telegram: {typeof window.Telegram !== 'undefined' ? '✅' : '❌'}<br/>
+                    WebApp: {window.Telegram?.WebApp ? '✅' : '❌'}<br/>
+                    User data: {user ? '✅' : '❌'}<br/>
+                    {user ? `ID: ${user.id}` : ''}
+                  </div>
                 </div>
               </Popup>
             </Marker>
