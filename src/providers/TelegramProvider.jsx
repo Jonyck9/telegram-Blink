@@ -1,14 +1,9 @@
 import { createContext, useContext, useEffect, useState, useMemo } from 'react'
 import {
-  init,
-  initData,
-  initDataUser,
-  themeParams,
-  themeParamsState,
-  viewport,
-  viewportState,
-  isTMA,
-  mockTelegramEnv,
+  init, initData, initDataUser,
+  themeParams, themeParamsState,
+  viewport, viewportState,
+  isTMA, mockTelegramEnv,
 } from '@telegram-apps/sdk'
 
 const TelegramContext = createContext(null)
@@ -33,45 +28,80 @@ function maybeMockTelegram() {
   })
 }
 
-/** Try every possible way to get the Telegram user */
-function extractUser() {
-  // 1. SDK's initDataUser (works after init+restore)
-  try { const u = initDataUser(); if (u) return u } catch {}
+/** Full debug: dump EVERYTHING we can find about the Telegram environment */
+function debugTelegramEnv() {
+  const dump = {
+    // URL info
+    url: window.location.href,
+    search: window.location.search,
+    hash: window.location.hash,
+    // SDK
+    isTMA: false,
+    // Telegram WebView global
+    hasTelegramGlobal: !!(window.Telegram),
+    hasTelegramWebApp: !!(window.Telegram?.WebApp),
+    tgInitData: null,
+    tgInitDataUnsafe: null,
+    // Extracted user
+    extractedUser: null,
+  }
 
-  // 2. Telegram WebView low-level API (always available in Telegram)
+  // Check SDK
+  try { dump.isTMA = isTMA() } catch {}
+
+  // Check Telegram global
   try {
-    const tg = window.Telegram?.WebApp
-    if (tg?.initDataUnsafe?.user) return tg.initDataUnsafe.user
-    // Also try raw initData
-    if (tg?.initData) {
-      const pairs = tg.initData.split('&')
-      for (const p of pairs) {
-        const [k, v] = p.split('=')
-        if (k === 'user' && v) return JSON.parse(decodeURIComponent(v))
-      }
+    if (window.Telegram?.WebApp) {
+      dump.tgInitData = window.Telegram.WebApp.initData
+      dump.tgInitDataUnsafe = window.Telegram.WebApp.initDataUnsafe
     }
   } catch {}
 
-  // 3. Direct URL parsing
+  // Try SDK user
+  try { dump.sdkUser = initDataUser() } catch {}
+
+  // Extract user from any source
   try {
-    const s = window.location.search || window.location.hash.replace('#', '')
-    const params = new URLSearchParams(s)
-    const raw = params.get('user') || new URLSearchParams(params.get('tgWebAppData') || '').get('user')
-    if (raw) return JSON.parse(decodeURIComponent(raw))
+    // From initDataUnsafe
+    if (window.Telegram?.WebApp?.initDataUnsafe?.user) {
+      dump.extractedUser = window.Telegram.WebApp.initDataUnsafe.user
+    }
+    // From initData string
+    if (!dump.extractedUser && window.Telegram?.WebApp?.initData) {
+      for (const p of window.Telegram.WebApp.initData.split('&')) {
+        const [k, v] = p.split('=')
+        if (k === 'user' && v) {
+          dump.extractedUser = JSON.parse(decodeURIComponent(v))
+        }
+      }
+    }
+    // From URL
+    if (!dump.extractedUser) {
+      const s = window.location.search || window.location.hash.replace('#', '')
+      const params = new URLSearchParams(s)
+      const raw = params.get('user') || new URLSearchParams(params.get('tgWebAppData') || '').get('user')
+      if (raw) dump.extractedUser = JSON.parse(decodeURIComponent(raw))
+    }
   } catch {}
 
-  return null
+  console.log('[Blink] 🐛 Telegram debug dump:', dump)
+  return dump
 }
 
 export function TelegramProvider({ children }) {
   const [ready, setReady] = useState(false)
   const [error, setError] = useState(null)
   const [user, setUser] = useState(null)
+  const [debugInfo, setDebugInfo] = useState(null)
 
-  // Extract user data immediately (before SDK init)
+  // Try to extract user on mount (before SDK)
   useEffect(() => {
-    const u = extractUser()
-    if (u) {
+    const dump = debugTelegramEnv()
+    setDebugInfo(dump)
+    console.log('[Blink] Debug:', JSON.stringify(dump, null, 2))
+
+    if (dump.extractedUser || dump.sdkUser) {
+      const u = dump.extractedUser || dump.sdkUser
       setUser({
         id: u.id,
         firstName: u.firstName || u.first_name,
@@ -84,7 +114,7 @@ export function TelegramProvider({ children }) {
     }
   }, [])
 
-  // Initialize SDK features (viewport, theme, etc.)
+  // Initialize SDK
   useEffect(() => {
     maybeMockTelegram()
     try {
@@ -103,9 +133,9 @@ export function TelegramProvider({ children }) {
   const value = useMemo(() => {
     const theme = themeParamsState()
     const vp = viewportState()
-
     return {
       user,
+      debug: debugInfo,
       theme: theme ? {
         bgColor: theme.bgColor, textColor: theme.textColor,
         hintColor: theme.hintColor, linkColor: theme.linkColor,
@@ -120,7 +150,7 @@ export function TelegramProvider({ children }) {
       ready, error,
       expandViewport: () => viewport.expand(),
     }
-  }, [ready, error, user])
+  }, [ready, error, user, debugInfo])
 
   return (
     <TelegramContext.Provider value={value}>

@@ -17,19 +17,20 @@ function LocationUpdater({ position }) {
 }
 
 export default function MapView() {
-  const { user } = useTelegram()
+  const { user, debug } = useTelegram()
   const [position, setPosition] = useState(null)
   const [error, setError] = useState(null)
+  const [showDebug, setShowDebug] = useState(false)
 
   const defaultCenter = [55.7558, 37.6173] // Moscow
 
-  // Build a marker icon
   const userIcon = useMemo(() => {
     const initials = user
-      ? `${user.firstName?.[0] ?? ''}${user.lastName?.[0] ?? ''}`.toUpperCase() || '?'
+      ? `${user.firstName?.[0] ?? ''}${user.lastName?.[0] ?? ''}`.toUpperCase() || user.firstName?.slice(0,2) || '?'
       : '?'
 
     const color = '#c084fc'
+    const bg = user ? color : '#ef4444' // red if no user
 
     return L.divIcon({
       className: '',
@@ -37,7 +38,7 @@ export default function MapView() {
         width:44px;height:44px;display:flex;align-items:center;justify-content:center;
       "><div style="
         width:40px;height:40px;border-radius:50%;
-        background:${color};
+        background:${bg};
         display:flex;align-items:center;justify-content:center;
         border:3px solid white;box-shadow:0 0 10px rgba(0,0,0,0.3);
         font-size:16px;font-weight:700;color:white;
@@ -96,8 +97,8 @@ export default function MapView() {
             <Marker position={position} icon={userIcon}>
               <Popup>
                 <div className="user-popup">
-                  <strong>{user?.firstName ?? 'You'}</strong>
-                  <span className="popup-status">📍 Live</span>
+                  <strong>{user?.firstName ?? 'No user'}</strong>
+                  <span className="popup-status">{user ? '📍 Live' : '⚠️ No Telegram data'}</span>
                   <span className="popup-coords">
                     {position[0].toFixed(4)}, {position[1].toFixed(4)}
                   </span>
@@ -120,6 +121,14 @@ export default function MapView() {
         <LocationUpdater position={position} />
       </MapContainer>
 
+      {/* Debug pill — tap logo in TopBar to show */}
+      {showDebug && debug && (
+        <div className="debug-overlay">
+          <button className="debug-close" onClick={() => setShowDebug(false)}>✕</button>
+          <pre>{JSON.stringify(debug, null, 2)}</pre>
+        </div>
+      )}
+
       {/* Floating action buttons */}
       <div className="map-fabs">
         <button
@@ -132,7 +141,7 @@ export default function MapView() {
             <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
           </svg>
         </button>
-        <button className="fab fab-friends" aria-label="Friends list">
+        <button className="fab fab-friends" aria-label="Friends list" onClick={() => setShowDebug(d => !d)}>
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
             <circle cx="9" cy="7" r="4" />
