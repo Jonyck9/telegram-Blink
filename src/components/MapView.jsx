@@ -1,7 +1,10 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { MapContainer, TileLayer, Marker, Popup, useMap, Circle } from 'react-leaflet'
 import L from 'leaflet'
 import { useTelegram } from '../providers/TelegramProvider'
+import { updateLocation, getFriendsWithLocations } from '../lib/supabase'
+import FriendMarkers from './FriendMarkers'
+import FriendsPanel from './FriendsPanel'
 import './MapView.css'
 
 function LocationUpdater({ position }) {
@@ -16,38 +19,36 @@ function LocationUpdater({ position }) {
   return null
 }
 
+function FlyToCenter({ lat, lng }) {
+  const map = useMap()
+  useEffect(() => {
+    if (lat != null && lng != null) {
+      map.flyTo([lat, lng], 15, { duration: 1 })
+    }
+  }, [lat, lng, map])
+  return null
+}
+
 export default function MapView() {
   const { user, debug } = useTelegram()
   const [position, setPosition] = useState(null)
   const [error, setError] = useState(null)
   const [showDebug, setShowDebug] = useState(false)
+  const [showFriends, setShowFriends] = useState(false)
+  const [friends, setFriends] = useState([])
+  const [centerFriend, setCenterFriend] = useState(null)
+  const previousPositionRef = useRef(null)
 
   const defaultCenter = [55.7558, 37.6173] // Moscow
 
-  const userIcon = useMemo(() => {
-    const initials = user
-      ? `${user.firstName?.[0] ?? ''}${user.lastName?.[0] ?? ''}`.toUpperCase() || user.firstName?.slice(0,2) || '?'
-      : '?'
-
-    const color = '#c084fc'
-    const bg = user ? color : '#ef4444' // red if no user
-
-    return L.divIcon({
-      className: '',
-      html: `<div style="
-        width:44px;height:44px;display:flex;align-items:center;justify-content:center;
-      "><div style="
-        width:40px;height:40px;border-radius:50%;
-        background:${bg};
-        display:flex;align-items:center;justify-content:center;
-        border:3px solid white;box-shadow:0 0 10px rgba(0,0,0,0.3);
-        font-size:16px;font-weight:700;color:white;
-      ">${initials}</div></div>`,
-      iconSize: [44, 44],
-      iconAnchor: [22, 22],
-    })
+  // ── Debounced location update to Supabase ──────────────────────
+  const sendLocationUpdate = useCallback((lat, lng) => {
+    if (user?.id) {
+      updateLocation(user.id, lat, lng)
+    }
   }, [user])
 
+  // ── Geolocation ────────────────────────────────────────────────
   useEffect(() => {
     if (!navigator.geolocation) {
       setError('Geolocation not supported')
@@ -56,7 +57,8 @@ export default function MapView() {
 
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
-        setPosition([pos.coords.latitude, pos.coords.longitude])
+        const newPos = [pos.coords.latitude, pos.coords.longitude]
+        setPosition(newPos)
         setError(null)
       },
       (err) => {
@@ -68,8 +70,84 @@ export default function MapView() {
     return () => navigator.geolocation.clearWatch(watchId)
   }, [])
 
+  // ── Send location to Supabase when it changes (debounced) ─────
+  useEffect(() => {
+    if (!position || !user?.id) return
+
+    // Only update if moved more than ~50 meters (0.0005 deg ≈ 50m)
+    const [lat, lng] = position
+    const prev = previousPositionRef.current
+    if (prev) {
+      const [plat, plng] = prev
+      const dist = Math.sqrt((lat - plat) ** 2 + (lng - plng) ** 2)
+      if (dist < 0.0005) return // too small to update
+    }
+
+    previousPositionRef.current = position
+    sendLocationUpdate(lat, lng)
+  }, [position, user?.id, sendLocationUpdate])
+
+  // ── Poll friends locations every 15 seconds ───────────────────
+  useEffect(() => {
+    if (!user?.id) return
+
+    const fetchFriends = async () => {
+      const data = await getFriendsWithLocations(user.id)
+      setFriends(data)
+    }
+
+    fetchFriends() // initial fetch
+    const interval = setInterval(fetchFriends, 15000)
+
+    return () => clearInterval(interval)
+  }, [user?.id])
+
+  // ── User icon ──────────────────────────────────────────────────
+  const userIcon = useMemo(() => {
+    const avatarUrl = user?.photoUrl
+    const initials = user
+      ? `${user.firstName?.[0] ?? ''}${user.lastName?.[0] ?? ''}`.toUpperCase() || user.firstName?.slice(0,2) || '?'
+      : '?'
+
+    const bg = user ? '#c084fc' : '#ef4444'
+
+    const innerContent = avatarUrl
+      ? `<img src="${avatarUrl}" style="
+          width:40px;height:40px;border-radius:50%;object-fit:cover;
+          border:3px solid white;box-shadow:0 0 10px rgba(0,0,0,0.3);
+        " onerror="this.style.display='none';this.parentElement.innerHTML='<div style=\\'width:40px;height:40px;border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;border:3px solid white;font-size:16px;font-weight:700;color:white;\\'>${initials}</div>'" />`
+      : `<div style="
+          width:40px;height:40px;border-radius:50%;
+          background:${bg};
+          display:flex;align-items:center;justify-content:center;
+          border:3px solid white;box-shadow:0 0 10px rgba(0,0,0,0.3);
+          font-size:16px;font-weight:700;color:white;
+        ">${initials}</div>`
+
+    return L.divIcon({
+      className: '',
+      html: `<div style="
+        width:44px;height:44px;display:flex;align-items:center;justify-content:center;
+      ">${innerContent}</div>`,
+      iconSize: [44, 44],
+      iconAnchor: [22, 22],
+    })
+  }, [user])
+
+  // ── Center on friend callback ──────────────────────────────────
+  const handleCenterFriend = useCallback((lat, lng) => {
+    setCenterFriend({ lat, lng })
+    setTimeout(() => setCenterFriend(null), 1500) // reset after fly
+  }, [])
+
   return (
     <div className="map-wrapper">
+      {!user && (
+        <div className="map-error" style={{ background: 'rgba(0,0,0,0.85)', color: '#fbbf24', whiteSpace: 'normal', maxWidth: '92%' }}>
+          <span>⚠️ User data not found — Telegram WebView may not have passed user info</span>
+        </div>
+      )}
+
       {error && (
         <div className="map-error">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -120,15 +198,31 @@ export default function MapView() {
           </>
         )}
 
+        {/* Friend markers */}
+        <FriendMarkers friends={friends} />
+
+        {centerFriend && (
+          <FlyToCenter lat={centerFriend.lat} lng={centerFriend.lng} />
+        )}
+
         <LocationUpdater position={position} />
       </MapContainer>
 
-      {/* Debug pill — tap logo in TopBar to show */}
+      {/* Debug overlay */}
       {showDebug && debug && (
         <div className="debug-overlay">
           <button className="debug-close" onClick={() => setShowDebug(false)}>✕</button>
           <pre>{JSON.stringify(debug, null, 2)}</pre>
         </div>
+      )}
+
+      {/* Friends panel */}
+      {showFriends && (
+        <FriendsPanel
+          friends={friends}
+          onClose={() => setShowFriends(false)}
+          onCenterFriend={handleCenterFriend}
+        />
       )}
 
       {/* Floating action buttons */}
@@ -143,7 +237,11 @@ export default function MapView() {
             <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
           </svg>
         </button>
-        <button className="fab fab-friends" aria-label="Friends list" onClick={() => setShowDebug(d => !d)}>
+        <button
+          className="fab fab-friends"
+          aria-label="Friends list"
+          onClick={() => setShowFriends(s => !s)}
+        >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
             <circle cx="9" cy="7" r="4" />
@@ -151,6 +249,7 @@ export default function MapView() {
             <path d="M16 3.13a4 4 0 0 1 0 7.75" />
           </svg>
         </button>
+        {/* Chat button placeholder — будет позже */}
         <button className="fab fab-chat" aria-label="Chat">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a14 0 0 1 2 2z" />

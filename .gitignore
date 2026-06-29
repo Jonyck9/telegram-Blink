@@ -2,4 +2,5 @@
 dist
 .vite
 *.local
+.env
 .DS_Store

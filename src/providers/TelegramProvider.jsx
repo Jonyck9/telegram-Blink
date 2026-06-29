@@ -5,11 +5,12 @@ import {
   viewport, viewportState,
   isTMA, mockTelegramEnv,
 } from '@telegram-apps/sdk'
+import { registerUser } from '../lib/supabase'
 
 const TelegramContext = createContext(null)
 
 function maybeMockTelegram() {
-  if (isTMA()) return
+  if (isTMA()) return false
   console.info('[Blink] Not in Telegram — applying mock environment')
   mockTelegramEnv({
     themeParams: {
@@ -26,66 +27,118 @@ function maybeMockTelegram() {
     },
     launchParams: { tgWebAppThemeParams: {}, tgWebAppVersion: '8', tgWebAppPlatform: 'web' },
   })
+  return true
 }
 
-/** Full debug: dump EVERYTHING we can find about the Telegram environment */
-function debugTelegramEnv() {
-  const dump = {
-    // URL info
-    url: window.location.href,
-    search: window.location.search,
-    hash: window.location.hash,
-    // SDK
-    isTMA: false,
-    // Telegram WebView global
-    hasTelegramGlobal: !!(window.Telegram),
-    hasTelegramWebApp: !!(window.Telegram?.WebApp),
-    tgInitData: null,
-    tgInitDataUnsafe: null,
-    // Extracted user
-    extractedUser: null,
-  }
-
-  // Check SDK
-  try { dump.isTMA = isTMA() } catch {}
-
-  // Check Telegram global
+/**
+ * Read user data from Telegram WebView by every possible method.
+ * Order: (1) SDK initDataUser (works after initData.restore),
+ *         (2) window.Telegram.WebApp.initDataUnsafe (always available in real TMA),
+ *         (3) manual initData string parse,
+ *         (4) URL search / hash params.
+ */
+function extractUserFromAnywhere() {
+  // 1 — SDK
   try {
-    if (window.Telegram?.WebApp) {
-      dump.tgInitData = window.Telegram.WebApp.initData
-      dump.tgInitDataUnsafe = window.Telegram.WebApp.initDataUnsafe
+    const u = initDataUser()
+    if (u && u.id) {
+      if (typeof u.id === 'number' && u.id > 0) {
+        console.log('[Blink] ✅ User via SDK:', u.id, u.firstName)
+        return u
+      }
     }
-  } catch {}
+  } catch (_) { /* SDK not initialised yet */ }
 
-  // Try SDK user
-  try { dump.sdkUser = initDataUser() } catch {}
-
-  // Extract user from any source
+  // 2 — window.Telegram.WebApp (sync, always ready in real TMA)
   try {
-    // From initDataUnsafe
-    if (window.Telegram?.WebApp?.initDataUnsafe?.user) {
-      dump.extractedUser = window.Telegram.WebApp.initDataUnsafe.user
+    const tg = window.Telegram?.WebApp
+    const u = tg?.initDataUnsafe?.user
+    if (u && typeof u.id === 'number' && u.id > 0) {
+      console.log('[Blink] ✅ User via window.Telegram.WebApp:', u.id, u.first_name || u.firstName)
+      return u
     }
-    // From initData string
-    if (!dump.extractedUser && window.Telegram?.WebApp?.initData) {
-      for (const p of window.Telegram.WebApp.initData.split('&')) {
-        const [k, v] = p.split('=')
+  } catch (_) {}
+
+  // 3 — manual parse of initData string
+  try {
+    const raw = window.Telegram?.WebApp?.initData
+    if (raw) {
+      for (const part of raw.split('&')) {
+        const [k, v] = part.split('=')
         if (k === 'user' && v) {
-          dump.extractedUser = JSON.parse(decodeURIComponent(v))
+          const parsed = JSON.parse(decodeURIComponent(v))
+          if (parsed?.id) {
+            console.log('[Blink] ✅ User via initData string parse:', parsed.id, parsed.first_name)
+            return parsed
+          }
         }
       }
     }
-    // From URL
-    if (!dump.extractedUser) {
-      const s = window.location.search || window.location.hash.replace('#', '')
-      const params = new URLSearchParams(s)
-      const raw = params.get('user') || new URLSearchParams(params.get('tgWebAppData') || '').get('user')
-      if (raw) dump.extractedUser = JSON.parse(decodeURIComponent(raw))
-    }
-  } catch {}
+  } catch (_) {}
 
-  console.log('[Blink] 🐛 Telegram debug dump:', dump)
-  return dump
+  // 4 — URL search / hash (works with tgWebAppData param)
+  try {
+    const s = window.location.search || window.location.hash.replace(/^#/, '')
+    const params = new URLSearchParams(s)
+    // Direct user param
+    const rawUser = params.get('user')
+    if (rawUser) {
+      const parsed = JSON.parse(decodeURIComponent(rawUser))
+      if (parsed?.id) { console.log('[Blink] ✅ User via URL user param:', parsed.id); return parsed }
+    }
+    // Inside tgWebAppData
+    const tgWebAppData = params.get('tgWebAppData')
+    if (tgWebAppData) {
+      const tgParams = new URLSearchParams(tgWebAppData)
+      const rawFromTg = tgParams.get('user')
+      if (rawFromTg) {
+        const parsed = JSON.parse(decodeURIComponent(rawFromTg))
+        if (parsed?.id) { console.log('[Blink] ✅ User via URL tgWebAppData:', parsed.id); return parsed }
+      }
+    }
+  } catch (_) {}
+
+  return null
+}
+
+function normalizeUser(raw) {
+  if (!raw || !raw.id) return null
+  return {
+    id: raw.id,
+    firstName: raw.firstName || raw.first_name || '',
+    lastName: raw.lastName || raw.last_name || '',
+    username: raw.username || '',
+    languageCode: raw.languageCode || raw.language_code || '',
+    photoUrl: raw.photoUrl || raw.photo_url || '',
+    isPremium: raw.isPremium || raw.is_premium || false,
+  }
+}
+
+function collectDebugDump(rawUser, normalizedUser) {
+  let initDataStr = null
+  let initDataUnsafe = null
+  try { initDataStr = window.Telegram?.WebApp?.initData || null } catch (_) {}
+  try { initDataUnsafe = window.Telegram?.WebApp?.initDataUnsafe || null } catch (_) {}
+
+  return {
+    url: window.location.href,
+    search: window.location.search,
+    hash: window.location.hash,
+    hasTelegramGlobal: typeof window.Telegram !== 'undefined',
+    hasTelegramWebApp: !!(window.Telegram?.WebApp),
+    initData: initDataStr ? initDataStr.slice(0, 500) : null,
+    initDataUnsafe: initDataUnsafe ? {
+      query_id: initDataUnsafe.query_id || null,
+      auth_date: initDataUnsafe.auth_date || null,
+      hash: initDataUnsafe.hash || null,
+      hasUser: !!initDataUnsafe.user,
+      userId: initDataUnsafe.user?.id || null,
+    } : null,
+    extractedUser: rawUser,
+    normalizedUser,
+    userAgent: navigator.userAgent,
+    platform: navigator.platform,
+  }
 }
 
 export function TelegramProvider({ children }) {
@@ -94,29 +147,11 @@ export function TelegramProvider({ children }) {
   const [user, setUser] = useState(null)
   const [debugInfo, setDebugInfo] = useState(null)
 
-  // Try to extract user on mount (before SDK)
+  // ─── Phase 1: init SDK & extract user ──────────────────────────────
   useEffect(() => {
-    const dump = debugTelegramEnv()
-    setDebugInfo(dump)
-    console.log('[Blink] Debug:', JSON.stringify(dump, null, 2))
+    const isMock = maybeMockTelegram()
 
-    if (dump.extractedUser || dump.sdkUser) {
-      const u = dump.extractedUser || dump.sdkUser
-      setUser({
-        id: u.id,
-        firstName: u.firstName || u.first_name,
-        lastName: u.lastName || u.last_name,
-        username: u.username,
-        languageCode: u.languageCode || u.language_code,
-        photoUrl: u.photoUrl || u.photo_url,
-        isPremium: u.isPremium || u.is_premium,
-      })
-    }
-  }, [])
-
-  // Initialize SDK
-  useEffect(() => {
-    maybeMockTelegram()
+    // Init SDK before reading user
     try {
       init()
       initData.restore()
@@ -127,6 +162,22 @@ export function TelegramProvider({ children }) {
     } catch (err) {
       console.warn('[Blink] SDK partial init:', err.message)
     }
+
+    // Now try to extract user (SDK is initialised, initData restored)
+    const raw = extractUserFromAnywhere()
+    const normalized = normalizeUser(raw)
+    if (normalized) {
+      setUser(normalized)
+      console.log('[Blink] 👤 User set:', normalized.firstName)
+
+      // Register user in Supabase (fire & forget)
+      registerUser(normalized)
+    } else {
+      console.log('[Blink] ❌ No user found. Mock-mode:', isMock)
+    }
+
+    // Collect full debug dump
+    setDebugInfo(collectDebugDump(raw, normalized))
     setReady(true)
   }, [])
 
